@@ -20,7 +20,7 @@ import (
 type Attar struct {
 	authProviderFunc authProvider
 	loginRoute       string
-	cookieOptions    *AttarOptions
+	cookieOptions    *Options
 	cookieStore      *sessions.CookieStore
 }
 
@@ -28,7 +28,7 @@ type Attar struct {
 	Primary attar options (except for basic settings also accommodates a
 	'gorilla/sessions' options (http://www.gorillatoolkit.org/pkg/sessions#Options)).
 */
-type AttarOptions struct {
+type Options struct {
 	// 'gorilla/sessions' section:
 	// description see on http://www.gorillatoolkit.org/pkg/sessions#Options
 	// or source on github
@@ -57,9 +57,9 @@ type AttarOptions struct {
 }
 
 /*
-	Set attar options (*AttarOptions).
+	Set attar options (*Options).
 */
-func (a *Attar) SetAttarOptions(o *AttarOptions) {
+func (a *Attar) Config(o *Options) {
 	a.cookieOptions = o
 }
 
@@ -151,34 +151,32 @@ func (a *Attar) GlobalAuthProxy(next http.Handler) http.HandlerFunc {
 func (a *Attar) AuthHandler(res http.ResponseWriter, req *http.Request) {
 	user := req.FormValue(a.cookieOptions.LoginFormUserFieldName)
 	password := req.FormValue(a.cookieOptions.LoginFormPasswordFieldName)
+	cookieStore := a.cookieStore
 
-	auth := a.authProviderFunc(user, password)
-	if auth == true {
-		var cookieStore = a.cookieStore
-
-		session, err := cookieStore.Get(req, a.cookieOptions.SessionName)
-		if err != nil {
-			http.Error(res, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		currentTime := time.Now().Local()
-
-		session.Values["user"] = req.FormValue(a.cookieOptions.LoginFormUserFieldName)
-		session.Values["loginTime"] = currentTime.Format(time.RFC3339)
-
-		// even if SessionBindUseragent or SessionBindUserHost is false -
-		// this data save to cookie, for option change without
-		// having to user relogin (and cookie re-get)
-		session.Values["userHost"] = strings.Split(req.RemoteAddr, ":")[0]
-		session.Values["useragent"] = req.UserAgent()
-
-		session.Save(req, res)
-
-		http.Redirect(res, req, "/", http.StatusFound)
-	} else {
+	if !a.authProviderFunc(user, password) {
 		http.Redirect(res, req, a.loginRoute, http.StatusFound)
 		return
 	}
+
+	session, err := cookieStore.Get(req, a.cookieOptions.SessionName)
+	if err != nil {
+		http.Error(res, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	currentTime := time.Now().Local()
+
+	session.Values["user"] = req.FormValue(a.cookieOptions.LoginFormUserFieldName)
+	session.Values["loginTime"] = currentTime.Format(time.RFC3339)
+
+	// even if SessionBindUseragent or SessionBindUserHost is false -
+	// this data save to cookie, for option change without
+	// having to user relogin (and cookie re-get)
+	session.Values["userHost"] = strings.Split(req.RemoteAddr, ":")[0]
+	session.Values["useragent"] = req.UserAgent()
+
+	session.Save(req, res)
+
+	http.Redirect(res, req, "/", http.StatusFound)
 }
 
 /*
@@ -305,7 +303,7 @@ func (a *Attar) SimpleAuthProvider(userlist map[string]string) authProvider {
 func New() *Attar {
 	return &Attar{
 		// default options
-		cookieOptions: &AttarOptions{
+		cookieOptions: &Options{
 			SessionName:                "attar-session",
 			SessionLifeTime:            86400,
 			SessionBindUseragent:       true,
