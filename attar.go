@@ -146,6 +146,26 @@ func (a *Attar) GlobalAuthProxy(next http.Handler) http.HandlerFunc {
 }
 
 /*
+	Logut handler, expire the session and save it.
+*/
+func (a *Attar) LogoutHandler(res http.ResponseWriter, req *http.Request) {
+
+	cookieStore := a.cookieStore
+
+	session, err := cookieStore.Get(req, a.cookieOptions.SessionName)
+	if err != nil {
+		http.Error(res, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	session.Options.MaxAge = -1
+	session.Save(req, res)
+
+	http.Redirect(res, req, "/", http.StatusFound)
+
+}
+
+/*
 	Auth handler, for grub login form data, and init cookie session.
 */
 func (a *Attar) AuthHandler(res http.ResponseWriter, req *http.Request) {
